@@ -1,0 +1,156 @@
+<!doctype>
+<html>
+<head>
+	<title></title>
+	<script type="text/javascript" src="jquery.min.js"></script>
+</head>
+<body>
+	<div id="content">
+		<canvas id="canvas" width="1" height="1" style="cursor:crosshair"></canvas>
+
+		<img src="brush.png" id="brush_image" style="display: none;" />
+
+		<script type="text/javascript">
+		var canvas = $("#canvas")[0];
+		var ctx = canvas.getContext("2d");
+
+		var zoom = 8;
+		var width = 56;
+		var height = width;
+		var padding = 2;
+		var color_select_height = 16;
+
+		var isMouseDown = false;
+		var initialized = false;
+
+		var pixels = new Uint8Array(width * height);
+		var msb = new Uint8Array(Math.floor((width*height+6)/7));
+
+		var patterns = [
+			// msb=0
+			0x000000, // black
+			0xa000ff, // purple
+			0x20c000, // green
+			0xffffff, // white
+			// msb=1
+			0x000000, // black
+			0x0080ff, // blue
+			0xf05000, // orange
+			0xffffff, // white
+		];
+
+		function resizeCanvas() {
+			canvas.width = 2 * (width * zoom) + padding;
+			canvas.height = (height * zoom);
+			paintCanvas();
+		}
+
+		function paintCanvas() {
+			// clear
+			ctx.fillStyle = "#000";
+			ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+			// paint padding
+			ctx.fillStyle = "#f00";
+			ctx.fillRect(width * zoom, 0, padding, canvas.height);
+
+			// paint monochrome
+			ctx.fillStyle = "#0f0";
+			for (var y=0; y<height; y++) {
+				for (var x=0; x<width; x++) {
+					if (pixels[y*width+x]) {
+						ctx.fillRect(x*zoom, y*zoom, zoom, zoom);
+					}
+				}
+			}
+
+			for (var y=0; y<height; y++) {
+
+				for (var x=0; x<width-1; x++) {
+
+					var color;
+
+					if (pixels[y*width+x]) {
+						// this pixel is turned on
+						if ((x > 0 && pixels[y*width+x-1]) || pixels[y*width+x+1]) {
+							// two or three in a row, this is white!
+							color = 3;
+						} else {
+							// pixel with no neighboring colors
+							color = (x & 1) ? 1 : 2;
+						}
+					} else {
+						// black pixel
+						color = 0;
+
+						if (x > 0 && pixels[y*width+x-1] && pixels[y*width+x+1]) {
+							// 101
+							color = (x & 1) ? 2 : 1;
+						}
+					}
+
+					var pat = msb[Math.floor((y*width+x)/7)];
+					var r = (patterns[pat*4+color] >> 16) & 0xff;
+					var g = (patterns[pat*4+color] >> 8) & 0xff;
+					var b = (patterns[pat*4+color] >> 0) & 0xff;
+					ctx.fillStyle = "rgb(" + r + "," + g + "," + b + ")";
+					ctx.fillRect((width*zoom + padding) + x*zoom, y*zoom, zoom, zoom);
+				}
+			}
+		}
+
+		function initialize() {
+			resizeCanvas();
+		}
+
+		function paintPixel(x, y, v) {
+			if (x >= 0 && y >= 0 && x < width && y < height) {
+				pixels[y*width + x] = v;
+				paintCanvas();
+			}
+		}
+
+		function canvasOnClick(e) {
+			var x = Math.floor(e.offsetX/zoom);
+			var y = Math.floor(e.offsetY/zoom);
+
+			if (e.shiftKey == false) {
+				// normal paint
+				var v = (e.ctrlKey == false) ? 1 : 0;
+				paintPixel(x, y, v);
+			} else {
+				// change msb
+				var offset = (y*width+x);
+				msb[Math.floor(offset/7)] ^= 1;
+				paintCanvas();
+			}
+		}
+
+		function canvasOnMouseMove(e) {
+			if (isMouseDown) {
+				var x = Math.floor(e.offsetX/zoom);
+				var y = Math.floor(e.offsetY/zoom);
+				var v = (e.ctrlKey == false) ? 1 : 0;
+				paintPixel(x, y, v);
+			}
+		}
+
+		function canvasOnMouseDown(e) {
+			isMouseDown = true;
+		}
+
+		function canvasOnMouseUp(e) {
+			isMouseDown = false;
+		}
+
+		$(document).ready(function() {
+			initialize();
+			$(canvas).click(canvasOnClick);
+			$(canvas).mousedown(canvasOnMouseDown);
+			$(canvas).mousemove(canvasOnMouseMove);
+			$(canvas).mouseup(canvasOnMouseUp);
+		});
+		</script>
+	</div>
+</body>
+</html>
